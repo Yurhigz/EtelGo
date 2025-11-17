@@ -1,0 +1,52 @@
+# Simple et clair
+version: "1.0"
+
+# Paramètres globaux
+pipeline:
+  name: "my-replay-pipeline"
+  workers: 16  # Nombre de workers pour le traitement
+
+# Source Kafka
+source:
+  type: kafka
+  brokers:
+    - "localhost:19092"
+  topic: "raw_telemetry"
+  consumer_group: "replay-processor"
+  partitions: 8
+  
+  # Paramètres optionnels avec valeurs par défaut
+  min_bytes: 1048576      # 1MB
+  max_bytes: 10485760     # 10MB
+  max_wait: "100ms"
+
+# Liste des transformations (appliquées dans l'ordre)
+processors:
+  - type: timestamp_replay
+    config:
+      granularity: day      # day, hour, ou minute
+  
+  # Exemple d'autres processors (commentés)
+  # - type: field_mapper
+  #   config:
+  #     mappings:
+  #       old_field: new_field
+  #       user_id: userId
+
+# Destination Kafka
+sink:
+  type: kafka
+  brokers:
+    - "localhost:19092"    # Peut être différent de la source
+  topic: "replay_output"
+  partitions: 8
+  
+  # Paramètres d'écriture
+  batch_size: 20000
+  batch_timeout: "50ms"
+  compression: snappy      # snappy, gzip, ou none
+  
+# Monitoring
+monitoring:
+  metrics_interval: "10s"  # Fréquence d'affichage des métriques
+  log_level: info          # debug, info, warn, error
