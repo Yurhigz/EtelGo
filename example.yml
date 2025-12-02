@@ -1,52 +1,86 @@
-# Simple et clair
 version: "1.0"
 
-# Paramètres globaux
-pipeline:
-  name: "my-replay-pipeline"
-  workers: 16  # Nombre de workers pour le traitement
-
-# Source Kafka
-source:
-  type: kafka
+# Input sources is limited to kafka so far, but it might be extended in the future
+input:
   brokers:
-    - "localhost:19092"
-  topic: "raw_telemetry"
-  consumer_group: "replay-processor"
-  partitions: 8
+    - "localhost:9092"
+  topic: "topic1"
+  consumer_group_id: "my_pipeline_group"
   
-  # Paramètres optionnels avec valeurs par défaut
-  min_bytes: 1048576      # 1MB
-  max_bytes: 10485760     # 10MB
+  # Parallelism
+  worker: 1  # 1 worker by default
+  
+  # Offsets
+  offset_reset: "earliest"  # earliest, latest, none
+  enable_auto_commit: true
+  auto_commit_interval: "5s"
+  
+  # Partitions (optional)
+  partitions: [0, 1, 2]  # List of partitions to consume from. If empty, all partitions will be consumed. Default: all partitions
+  
+  # Format and schema
+  format: "JSON"  # JSON, CSV, Protobuf, AVRO, Text
+  schema_registry_url:  # Mandatory only if AVRO or Protobuf
+  
+  # Performance
+  min_bytes: 1048576   # Default: 1KB
+  max_bytes: 10485760  # Default: 10MB
   max_wait: "100ms"
+  
+  # Timeouts
+  session_timeout: "30s"
+  heartbeat_interval: "3s"
 
-# Liste des transformations (appliquées dans l'ordre)
+# List of processors to apply in order
 processors:
-  - type: timestamp_replay
+  - type: "timestamp_replay"
     config:
-      granularity: day      # day, hour, ou minute
-  
-  # Exemple d'autres processors (commentés)
-  # - type: field_mapper
-  #   config:
-  #     mappings:
-  #       old_field: new_field
-  #       user_id: userId
+      granularity: "day"  # day, hour, or minute
+      
+  - type: "processor_1"
+    config:
+      field: "timestamp"
+      
+  - type: "processor_2"
+    config:
+      prefix: "ETL-"
 
-# Destination Kafka
-sink:
-  type: kafka
+# The destination is limited to kafka so far, but it might be extended in the future
+# Which is why we specify "type"
+output:
+  type: "kafka"
   brokers:
-    - "localhost:19092"    # Peut être différent de la source
-  topic: "replay_output"
-  partitions: 8
+    - "localhost:9092"
+  topic: "out-topic"
   
-  # Paramètres d'écriture
-  batch_size: 20000
-  batch_timeout: "50ms"
-  compression: snappy      # snappy, gzip, ou none
+  # Parallelism
+  worker: 1  # 1 worker by default
   
+  # Partitions (optional)
+  partitions: [0, 1, 2]  # List of partitions to write to. If empty, all partitions will be used. Default: all partitions
+  
+  # Format and schema
+  format: "JSON"  # AVRO, JSON, CSV, Protobuf, Text are also supported
+  schema_registry_url:  # Mandatory only if AVRO or Protobuf
+  
+  # Performance
+  batch_size: 5000
+  compression: "snappy"
+  
+  # Topic management
+  auto_create_topic: true
+  
+  # Reliability
+  request_timeout: "30s"
+  retry_backoff: "100ms"
+  max_retries: 3
+
 # Monitoring
 monitoring:
-  metrics_interval: "10s"  # Fréquence d'affichage des métriques
-  log_level: info          # debug, info, warn, error
+  log_level: "info"  # debug, info, warn, error available
+  log_format: "json"  # json, text
+  metrics_interval: "10s"
+  metrics_export:
+    enabled: false
+    type: "prometheus"  # For future use
+    port: 9090
