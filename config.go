@@ -34,91 +34,53 @@ var ValidFormats = map[Format]bool{
 	FormatString: true,
 }
 
-// There are 3 main sections: Input, Processors and Output.
-// Input sections :
-//
-//   - Mandatory :
-//     Brokers (list of string),
-//     topic (string)
-//     consumer_group_id (string)
-//     format (string)
-//     schema_registry_url (string) if AVRO or PROTOBUF
-//     workers (int) - default 1
-//
-//   - Optional() :
-//     offset_reset (string) - default "latest"
-//     enable_auto_commit (bool) - default false
-//     auto_commit_interval (int in s) - default 5s
-//     partitions (list of int)
-//     min_bytes (int)
-//     max_bytes (int)
-//     max_wait_time (int in ms)
-//     session_timeout (int in ms)
-//     heartbeat_interval (int in s)
+// InputConfig holds Kafka consumer configuration
+// Supports both mandatory and optional fields for flexible source setup
 type InputConfig struct {
 	// Mandatory fields
-	Brokers        []string `yaml:"brokers"`
-	Topic          string   `yaml:"topic"`
-	ConsumerGroup  string   `yaml:"consumer_group_id"`
-	Format         string   `yaml:"format"`
-	SchemaRegistry string   `yaml:"schema_registry_url,omitempty"`
-	Workers        int      `yaml:"workers"`
+	Brokers        []string `yaml:"brokers"`             // List of Kafka broker addresses (e.g., ["localhost:9092"])
+	Topic          string   `yaml:"topic"`               // Kafka topic to consume from
+	ConsumerGroup  string   `yaml:"consumer_group_id"`   // Consumer group ID for offset management
+	Format         string   `yaml:"format"`              // Message format: "json", "avro", "protobuf", or "string"
+	SchemaRegistry string   `yaml:"schema_registry_url"` // Schema registry URL (required for avro/protobuf formats)
+	Workers        int      `yaml:"workers"`             // Number of parallel consumer workers
 
 	// Optional fields
-	Offset_reset         string `yaml:"offset_reset,omitempty"`
-	Enable_auto_commit   bool   `yaml:"enable_auto_commit,omitempty"`
-	Auto_commit_interval string `yaml:"auto_commit_interval,omitempty"`
-	Partitions           []int  `yaml:"partitions,omitempty"`
-	Min_bytes            int    `yaml:"min_bytes,omitempty"`
-	Max_bytes            int    `yaml:"max_bytes,omitempty"`
-	Max_wait_time        int    `yaml:"max_wait_time,omitempty"`
-	Session_timeout      string `yaml:"session_timeout,omitempty"`
-	Heartbeat_interval   string `yaml:"heartbeat_interval,omitempty"`
+	Offset_reset         string `yaml:"offset_reset,omitempty"`         // Offset reset strategy: "earliest" or "latest" (default: "latest")
+	Enable_auto_commit   bool   `yaml:"enable_auto_commit,omitempty"`   // Auto-commit consumed offsets (default: false)
+	Auto_commit_interval string `yaml:"auto_commit_interval,omitempty"` // Interval for auto-commit in seconds (default: 5s)
+	Partitions           []int  `yaml:"partitions,omitempty"`           // Specific partitions to consume; if empty, consume all
+	Min_bytes            int    `yaml:"min_bytes,omitempty"`            // Minimum bytes per fetch request
+	Max_bytes            int    `yaml:"max_bytes,omitempty"`            // Maximum bytes per fetch request
+	Max_wait_time        int    `yaml:"max_wait_time,omitempty"`        // Maximum wait time in milliseconds
+	Session_timeout      string `yaml:"session_timeout,omitempty"`      // Session timeout duration (e.g., "10s", "30000ms")
+	Heartbeat_interval   string `yaml:"heartbeat_interval,omitempty"`   // Heartbeat interval duration (e.g., "3s")
 }
 
-// Processors section :
-//   - Mandatory :
-//   - There is no mandatory field in processors section
-//   - Optional :
-//   - type (string) - "filter", "transform", "enrich" (examples)
+// ProcessorConfig holds the pipeline processor configuration
+// Currently no mandatory or optional fields defined
 type ProcessorConfig struct {
 }
 
-// Output section :
-//	- Mandatory :
-//		type (string) - "kafka"
-//		Brokers (list of string)
-//		topic (string)
-//		worker (int) - default 1
-//		format (string)
-//		schema_registry_url (string) if AVRO or PROTOBUF
-
-//   - Optional :
-//     partitions (list of int)
-//     batch_size (int) - default 2000
-//     compression (string) - "none", "gzip", "snappy", "lz4", "zstd" - default "none"
-//     auto_create_topic (bool) - default false
-//
-//     request_timeout (int in s) - default 30s
-//     retry_backoff (int in s) - default 2s
-//     max_retries (int) - default 3
+// OutputConfig holds Kafka producer configuration
+// Supports both mandatory and optional fields for flexible output setup
 type OutputConfig struct {
 	// Mandatory fields
-	Type           string   `yaml:"type"`
-	Brokers        []string `yaml:"brokers"`
-	Topic          string   `yaml:"topic"`
-	Workers        int      `yaml:"workers"`
-	Format         string   `yaml:"format"`
-	SchemaRegistry string   `yaml:"schema_registry_url,omitempty"`
+	Type           string   `yaml:"type"`                          // Output type: "kafka"
+	Brokers        []string `yaml:"brokers"`                       // List of Kafka broker addresses
+	Topic          string   `yaml:"topic"`                         // Kafka topic to produce to
+	Workers        int      `yaml:"workers"`                       // Number of parallel producer workers
+	Format         string   `yaml:"format"`                        // Message format: "json", "avro", "protobuf", or "string"
+	SchemaRegistry string   `yaml:"schema_registry_url,omitempty"` // Schema registry URL (required for avro/protobuf formats)
 
 	// Optional fields
-	Partitions        []int  `yaml:"partitions,omitempty"`
-	Batch_size        int    `yaml:"batch_size,omitempty"`
-	Compression       string `yaml:"compression,omitempty"`
-	Auto_create_topic bool   `yaml:"auto_create_topic,omitempty"`
-	Request_timeout   string `yaml:"request_timeout,omitempty"`
-	Retry_backoff     string `yaml:"retry_backoff,omitempty"`
-	Max_retries       int    `yaml:"max_retries,omitempty"`
+	Partitions        []int  `yaml:"partitions,omitempty"`        // Target partitions; if empty, use default partitioner
+	Batch_size        int    `yaml:"batch_size,omitempty"`        // Number of messages to batch before sending (default: 2000)
+	Compression       string `yaml:"compression,omitempty"`       // Compression algorithm: "none", "gzip", "snappy", "lz4", "zstd" (default: "none")
+	Auto_create_topic bool   `yaml:"auto_create_topic,omitempty"` // Auto-create topic if it doesn't exist (default: false)
+	Request_timeout   string `yaml:"request_timeout,omitempty"`   // Request timeout duration (e.g., "30s") (default: 30s)
+	Retry_backoff     string `yaml:"retry_backoff,omitempty"`     // Backoff duration between retries (e.g., "2s") (default: 2s)
+	Max_retries       int    `yaml:"max_retries,omitempty"`       // Maximum number of retry attempts (default: 3)
 }
 
 // Yaml Parsing function to load configuration from a YAML file
