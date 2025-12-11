@@ -46,15 +46,15 @@ type InputConfig struct {
 	Workers        int      `yaml:"workers"`             // Number of parallel consumer workers
 
 	// Optional fields
-	Offset_reset         string `yaml:"offset_reset,omitempty"`         // Offset reset strategy: "earliest" or "latest" (default: "latest")
-	Enable_auto_commit   bool   `yaml:"enable_auto_commit,omitempty"`   // Auto-commit consumed offsets (default: false)
-	Auto_commit_interval string `yaml:"auto_commit_interval,omitempty"` // Interval for auto-commit in seconds (default: 5s)
-	Partitions           []int  `yaml:"partitions,omitempty"`           // Specific partitions to consume; if empty, consume all
-	Min_bytes            int    `yaml:"min_bytes,omitempty"`            // Minimum bytes per fetch request
-	Max_bytes            int    `yaml:"max_bytes,omitempty"`            // Maximum bytes per fetch request
-	Max_wait_time        int    `yaml:"max_wait_time,omitempty"`        // Maximum wait time in milliseconds
-	Session_timeout      string `yaml:"session_timeout,omitempty"`      // Session timeout duration (e.g., "10s", "30000ms")
-	Heartbeat_interval   string `yaml:"heartbeat_interval,omitempty"`   // Heartbeat interval duration (e.g., "3s")
+	Offset_reset         *string `yaml:"offset_reset,omitempty"`         // Offset reset strategy: "earliest" or "latest" (default: "latest")
+	Enable_auto_commit   *bool   `yaml:"enable_auto_commit,omitempty"`   // Auto-commit consumed offsets (default: false)
+	Auto_commit_interval *string `yaml:"auto_commit_interval,omitempty"` // Interval for auto-commit in seconds (default: 5s)
+	Partitions           []int   `yaml:"partitions,omitempty"`           // Specific partitions to consume; if empty, consume all
+	Min_bytes            *int    `yaml:"min_bytes,omitempty"`            // Minimum bytes per fetch request
+	Max_bytes            *int    `yaml:"max_bytes,omitempty"`            // Maximum bytes per fetch request
+	Max_wait_time        *int    `yaml:"max_wait_time,omitempty"`        // Maximum wait time in milliseconds
+	Session_timeout      *string `yaml:"session_timeout,omitempty"`      // Session timeout duration (e.g., "10s", "30000ms")
+	Heartbeat_interval   *string `yaml:"heartbeat_interval,omitempty"`   // Heartbeat interval duration (e.g., "3s")
 }
 
 // ProcessorConfig holds the pipeline processor configuration
@@ -74,13 +74,13 @@ type OutputConfig struct {
 	SchemaRegistry string   `yaml:"schema_registry_url,omitempty"` // Schema registry URL (required for avro/protobuf formats)
 
 	// Optional fields
-	Partitions        []int  `yaml:"partitions,omitempty"`        // Target partitions; if empty, use default partitioner
-	Batch_size        int    `yaml:"batch_size,omitempty"`        // Number of messages to batch before sending (default: 2000)
-	Compression       string `yaml:"compression,omitempty"`       // Compression algorithm: "none", "gzip", "snappy", "lz4", "zstd" (default: "none")
-	Auto_create_topic bool   `yaml:"auto_create_topic,omitempty"` // Auto-create topic if it doesn't exist (default: false)
-	Request_timeout   string `yaml:"request_timeout,omitempty"`   // Request timeout duration (e.g., "30s") (default: 30s)
-	Retry_backoff     string `yaml:"retry_backoff,omitempty"`     // Backoff duration between retries (e.g., "2s") (default: 2s)
-	Max_retries       int    `yaml:"max_retries,omitempty"`       // Maximum number of retry attempts (default: 3)
+	Partitions        []int   `yaml:"partitions,omitempty"`        // Target partitions; if empty, use default partitioner
+	Batch_size        *int    `yaml:"batch_size,omitempty"`        // Number of messages to batch before sending (default: 2000)
+	Compression       *string `yaml:"compression,omitempty"`       // Compression algorithm: "none", "gzip", "snappy", "lz4", "zstd" (default: "none")
+	Auto_create_topic *bool   `yaml:"auto_create_topic,omitempty"` // Auto-create topic if it doesn't exist (default: false)
+	Request_timeout   *string `yaml:"request_timeout,omitempty"`   // Request timeout duration (e.g., "30s") (default: 30s)
+	Retry_backoff     *string `yaml:"retry_backoff,omitempty"`     // Backoff duration between retries (e.g., "2s") (default: 2s)
+	Max_retries       *int    `yaml:"max_retries,omitempty"`       // Maximum number of retry attempts (default: 3)
 }
 
 // Yaml Parsing function to load configuration from a YAML file
@@ -121,8 +121,43 @@ func (ic *InputConfig) Validate(logger *slog.Logger) error {
 		ic.Workers = 1
 	}
 
+	if ic.Offset_reset == nil {
+		defaultValue := "latest"
+		ic.Offset_reset = &defaultValue
+		logger.Warn("Offset_reset not provided, using default", "default", "latest")
+	} else {
+		validOffsets := []string{"earliest", "latest"}
+		valid := false
+		for _, v := range validOffsets {
+			if *ic.Offset_reset == v {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			logger.Error("Invalid offset_reset value", "value", *ic.Offset_reset)
+			return fmt.Errorf("offset_reset must be 'earliest' or 'latest', got: %s", *ic.Offset_reset)
+		}
+	}
+
+	if ic.Enable_auto_commit == nil {
+		defaultValue := false
+		ic.Enable_auto_commit = &defaultValue
+		logger.Debug("Enable_auto_commit not provided, using default", "default", false)
+	}
+
+	if ic.Auto_commit_interval == nil {
+		defaultValue := "5s"
+		ic.Auto_commit_interval = &defaultValue
+		logger.Debug("Auto_commit_interval not provided, using default", "default", "5s")
+	}
+
 	logger.Info("InputConfig validation successful")
 	return nil
+}
+
+func (ic *InputConfig) getMinBytes() int {
+
 }
 
 func (oc *OutputConfig) Validate(logger *slog.Logger) error {
@@ -155,6 +190,16 @@ func (oc *OutputConfig) Validate(logger *slog.Logger) error {
 	if (oc.Format == "avro" || oc.Format == "protobuf") && oc.SchemaRegistry == "" {
 		logger.Error("OutputConfig validation failed: schema_registry_url is required for AVRO and PROTOBUF formats")
 		return fmt.Errorf("schema_registry_url is required for AVRO and PROTOBUF formats")
+	}
+
+	if *oc.Batch_size <= 0 || *oc.Batch_size > 100000 {
+		logger.Warn("Batch_size not set or invalid, defaulting to 2000")
+		*oc.Batch_size = 2000
+	}
+
+	if oc.Compression == nil {
+		logger.Info("Compression not set, defaulting to 'none'")
+		*oc.Compression = "none"
 	}
 
 	logger.Info("InputConfig validation successful")
