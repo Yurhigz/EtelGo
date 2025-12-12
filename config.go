@@ -157,7 +157,7 @@ func (ic *InputConfig) Validate(logger *slog.Logger) error {
 }
 
 func (ic *InputConfig) getMinBytes() int {
-
+	panic("Not implemented yet")
 }
 
 func (oc *OutputConfig) Validate(logger *slog.Logger) error {

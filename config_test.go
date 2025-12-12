@@ -234,7 +234,7 @@ func TestValidateOutput(t *testing.T) {
 				Topic:      "output-topic",
 				Format:     "json",
 				Workers:    1,
-				Batch_size: 0,
+				Batch_size: new(int),
 			},
 			wantErr: false,
 		},
@@ -266,7 +266,7 @@ func TestValidateOutput(t *testing.T) {
 				if configCopy.Workers <= 0 {
 					t.Errorf("Workers should be at least 1, got %d", configCopy.Workers)
 				}
-				if configCopy.Batch_size <= 0 {
+				if *configCopy.Batch_size <= 0 {
 					t.Errorf("Batch_size should be at least 2000, got %d", configCopy.Batch_size)
 				}
 			}
