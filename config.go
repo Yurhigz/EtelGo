@@ -152,6 +152,8 @@ func (ic *InputConfig) Validate(logger *slog.Logger) error {
 		logger.Debug("Auto_commit_interval not provided, using default", "default", "5s")
 	}
 
+	// Auto_commit, session_timeout, heartbeat_interval parsing here after verification if nil
+
 	logger.Info("InputConfig validation successful")
 	return nil
 }
@@ -201,6 +203,8 @@ func (oc *OutputConfig) Validate(logger *slog.Logger) error {
 		logger.Info("Compression not set, defaulting to 'none'")
 		*oc.Compression = "none"
 	}
+
+	// Request_timeout, retry_backoff parsing here after verification if nil
 
 	logger.Info("InputConfig validation successful")
 	return nil
