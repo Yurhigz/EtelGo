@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/goccy/go-yaml"
 )
@@ -92,6 +93,7 @@ type Validator interface {
 
 func (ic *InputConfig) Validate(logger *slog.Logger) error {
 	logger.Debug("Validating InputConfig", "topic", ic.Topic)
+
 	if len(ic.Brokers) == 0 {
 		logger.Error("InputConfig validation failed: Brokers is required and cannot be empty")
 		return fmt.Errorf("brokers is required and cannot be empty")
@@ -146,20 +148,68 @@ func (ic *InputConfig) Validate(logger *slog.Logger) error {
 		logger.Debug("Enable_auto_commit not provided, using default", "default", false)
 	}
 
-	if ic.Auto_commit_interval == nil {
-		defaultValue := "5s"
-		ic.Auto_commit_interval = &defaultValue
-		logger.Debug("Auto_commit_interval not provided, using default", "default", "5s")
+	if *ic.Enable_auto_commit {
+		if ic.Auto_commit_interval == nil {
+			defaultValue := "5s"
+			ic.Auto_commit_interval = &defaultValue
+			logger.Debug("Auto_commit_interval not provided, using default", "default", "5s")
+		} else {
+			_, err := time.ParseDuration(*ic.Auto_commit_interval)
+			if err != nil {
+				logger.Error("Invalid auto_commit_interval format", "value", *ic.Auto_commit_interval)
+				return fmt.Errorf("invalid auto_commit_interval: %w", err)
+			}
+		}
+	} else {
+		if ic.Auto_commit_interval != nil {
+			logger.Warn("Auto_commit_interval ignored because enable_auto_commit is false")
+		}
 	}
 
-	// Auto_commit, session_timeout, heartbeat_interval parsing here after verification if nil
+	if ic.Min_bytes == nil {
+		defaultValue := 1024
+		ic.Min_bytes = &defaultValue
+		logger.Info("Min_bytes not set, defaulting to", "default", defaultValue)
+	}
+
+	if ic.Max_bytes == nil {
+		defaultValue := 1048576
+		ic.Max_bytes = &defaultValue
+		logger.Info("Max_bytes not set, defaulting to", "default", defaultValue)
+	}
+
+	if ic.Max_wait_time == nil {
+		defaultValue := 500
+		ic.Max_wait_time = &defaultValue
+		logger.Info("Max_wait_time not set, defaulting to", "default", defaultValue)
+	}
+
+	if ic.Session_timeout != nil {
+		_, err := time.ParseDuration(*ic.Session_timeout)
+		if err != nil {
+			logger.Error("InputConfig validation failed: Invalid session_timeout format", "value", *ic.Session_timeout)
+			return fmt.Errorf("invalid session_timeout format: %w", err)
+		}
+	} else {
+		defaultValue := "10s"
+		ic.Session_timeout = &defaultValue
+		logger.Info("Session_timeout not set, defaulting to", "default", defaultValue)
+	}
+
+	if ic.Heartbeat_interval != nil {
+		_, err := time.ParseDuration(*ic.Heartbeat_interval)
+		if err != nil {
+			logger.Error("InputConfig validation failed: Invalid heartbeat_interval format", "value", *ic.Heartbeat_interval)
+			return fmt.Errorf("invalid heartbeat_interval format: %w", err)
+		}
+	} else {
+		defaultValue := "3s"
+		ic.Heartbeat_interval = &defaultValue
+		logger.Info("Heartbeat_interval not set, defaulting to", "default", defaultValue)
+	}
 
 	logger.Info("InputConfig validation successful")
 	return nil
-}
-
-func (ic *InputConfig) getMinBytes() int {
-	panic("Not implemented yet")
 }
 
 func (oc *OutputConfig) Validate(logger *slog.Logger) error {
@@ -194,17 +244,72 @@ func (oc *OutputConfig) Validate(logger *slog.Logger) error {
 		return fmt.Errorf("schema_registry_url is required for AVRO and PROTOBUF formats")
 	}
 
-	if *oc.Batch_size <= 0 || *oc.Batch_size > 100000 {
-		logger.Warn("Batch_size not set or invalid, defaulting to 2000")
-		*oc.Batch_size = 2000
+	if oc.Batch_size == nil {
+		defaultValue := 2000
+		oc.Batch_size = &defaultValue
+		logger.Debug("Batch_size not provided, using default", "default", 2000)
+	} else if *oc.Batch_size <= 0 || *oc.Batch_size > 100000 {
+		logger.Warn("Batch_size invalid, using default", "provided", *oc.Batch_size)
+		defaultValue := 2000
+		oc.Batch_size = &defaultValue
 	}
 
 	if oc.Compression == nil {
-		logger.Info("Compression not set, defaulting to 'none'")
-		*oc.Compression = "none"
+		defaultValue := "none"
+		oc.Compression = &defaultValue
+		logger.Debug("Compression not provided, using default", "default", "none")
+	} else {
+		// Valider les valeurs acceptées
+		validCompressions := []string{"none", "gzip", "snappy", "lz4", "zstd"}
+		valid := false
+		for _, v := range validCompressions {
+			if *oc.Compression == v {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			logger.Error("Invalid compression", "value", *oc.Compression)
+			return fmt.Errorf("compression must be one of: none, gzip, snappy, lz4, zstd; got: %s", *oc.Compression)
+		}
 	}
 
-	// Request_timeout, retry_backoff parsing here after verification if nil
+	if oc.Auto_create_topic == nil {
+		defaultValue := false
+		oc.Auto_create_topic = &defaultValue
+		logger.Info("Auto_create_topic not set, defaulting to", "default", defaultValue)
+	}
+
+	if oc.Retry_backoff != nil {
+		_, err := time.ParseDuration(*oc.Retry_backoff)
+		if err != nil {
+			logger.Error("Invalid retry_backoff format", "value", *oc.Retry_backoff)
+			return fmt.Errorf("invalid retry_backoff: %w", err)
+		}
+	} else {
+		defaultValue := "2s"
+		logger.Info("Retry_backoff not set, defaulting to", "default", defaultValue)
+		oc.Retry_backoff = &defaultValue
+	}
+
+	if oc.Request_timeout != nil {
+		_, err := time.ParseDuration(*oc.Request_timeout)
+		if err != nil {
+			logger.Error("OutputConfig validation failed: Invalid request_timeout format, default value of 10s was set", "value", *oc.Request_timeout)
+			*oc.Request_timeout = "10s"
+		}
+
+	} else {
+		defaultValue := "10s"
+		logger.Info("Request_timeout not set, defaulting to", "default", defaultValue)
+		oc.Request_timeout = &defaultValue
+	}
+
+	if oc.Max_retries == nil {
+		defaultValue := 3
+		oc.Max_retries = &defaultValue
+		logger.Info("Max_retries not set, defaulting to", "default", defaultValue)
+	}
 
 	logger.Info("InputConfig validation successful")
 	return nil
@@ -225,10 +330,20 @@ func LoadConfig(filePath string, logger *slog.Logger) (*Config, error) {
 	err = yaml.Unmarshal(content, cfg)
 
 	if err != nil {
-		return nil, err
+		logger.Error("Failed to parse YAML", "error", err)
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	return cfg, nil
+	if err := cfg.Input.Validate(logger); err != nil {
+		return nil, fmt.Errorf("input validation failed: %w", err)
+	}
 
-	// panic("Not implemented yet")
+	if err := cfg.Output.Validate(logger); err != nil {
+		return nil, fmt.Errorf("output validation failed: %w", err)
+	}
+
+	if err := cfg.Processor.Validate(logger); err != nil {
+		return nil, fmt.Errorf("processor validation failed: %w", err)
+	}
+	return cfg, nil
 }
