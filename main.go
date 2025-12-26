@@ -3,21 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 )
 
-type CLIConfig struct {
-	Configuration string
-	LogLevel      string
-	DryRun        bool
-}
+const Version = "1.0.0"
 
 func main() {
-
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
 
 	command := os.Args[1]
 
@@ -27,7 +19,7 @@ func main() {
 	case "validate":
 		validateCommand()
 	case "version":
-		fmt.Println("EtelGo v1.0.0")
+		fmt.Println(Version)
 	case "help":
 		printUsage()
 	default:
@@ -36,104 +28,76 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := LoadConfig("example.yml", nil)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%v", config.Input)
-
-	// Partie CLI pour l'usage d'options
-	// Déclaration de l'ensemble de mes flags
-
-	configuration := flag.String("config", "/config/*.yml", "Path to the configuration file")
-	loglevel := flag.String("loglevel", "info", "Log level (debug, info, warn, error)")
-	dryrun := flag.Bool("dryrun", false, "Enable dry run mode")
-
-	flag.Parse()
 }
 
-// func runCommand() {
-// 	fs := flag.NewFlagSet("run", flag.ExitOnError)
+// Logger function to create a new logger based on log level
+func newLogger(logLevel string) *slog.Logger {
+	logLevelMap := map[string]slog.Level{
+		"debug": slog.LevelDebug,
+		"info":  slog.LevelInfo,
+		"warn":  slog.LevelWarn,
+		"error": slog.LevelError,
+	}
+	level, ok := logLevelMap[logLevel]
+	if !ok {
+		level = slog.LevelInfo
+		fmt.Printf("Unknown log level: %s, defaulting to info\n", logLevel)
+	}
 
-// 	// Flags essentiels (basés sur votre config)
-// 	configFile := fs.String("config", "config.yml", "Configuration file path")
-// 	logLevel := fs.String("loglevel", "info", "Log level (debug, info, warn, error)")
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(logger)
+	return logger
+}
 
-// 	// Flags d'observabilité (du README)
-// 	metricsInterval := fs.String("metrics-interval", "30s", "Interval for metrics reporting")
+// runCommand stats the pipeline based on the provided configuration with the flags.
+func runCommand() {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
 
-// 	// Flags de robustesse (du README - graceful shutdown)
-// 	shutdownTimeout := fs.String("shutdown-timeout", "30s", "Graceful shutdown timeout")
+	configFile := fs.String("config", "config.yml", "Configuration file path")
+	logLevel := fs.String("loglevel", "info", "Log level (debug, info, warn, error)")
+	dryRun := fs.Bool("dry-run", false, "Run without writing to output (validation only)")
 
-// 	// Flag pour dry-run (utile pour tester sans écrire)
-// 	dryRun := fs.Bool("dry-run", false, "Run without writing to output (validation only)")
+	fs.Parse(os.Args[2:])
 
-// 	fs.Parse(os.Args[2:])
+	logger := newLogger(*logLevel)
 
-// 	// Initialiser le logger
-// 	logLevelMap := map[string]slog.Level{
-// 		"debug": slog.LevelDebug,
-// 		"info":  slog.LevelInfo,
-// 		"warn":  slog.LevelWarn,
-// 		"error": slog.LevelError,
-// 	}
-// 	level, ok := logLevelMap[*logLevel]
-// 	if !ok {
-// 		level = slog.LevelInfo
-// 	}
+	config, err := LoadConfig(*configFile, logger)
+	if err != nil {
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
 
-// 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-// 	slog.SetDefault(logger)
+	logger.Info("Starting pipeline",
+		"topic_in", config.Input.Topic,
+		"topic_out", config.Output.Topic,
+		"dry_run", *dryRun,
+	)
 
-// 	// Charger la config
-// 	config, err := LoadConfig(*configFile, logger)
-// 	if err != nil {
-// 		logger.Error("Failed to load config", "error", err)
-// 		os.Exit(1)
-// 	}
+	// Suite de la logique à implémenter et à appeler dans le run
+}
 
-// 	logger.Info("Starting pipeline",
-// 		"topic_in", config.Input.Topic,
-// 		"topic_out", config.Output.Topic,
-// 		"dry_run", *dryRun,
-// 		"metrics_interval", *metricsInterval,
-// 	)
+// validateCommand checks the configuration file to insure it's valid
+func validateCommand() {
+	fs := flag.NewFlagSet("validate", flag.ExitOnError)
+	configFile := fs.String("config", "config.yml", "Configuration file path")
+	logLevel := fs.String("loglevel", "info", "Log level (debug, info, warn, error)")
 
-// 	// Votre logique d'exécution
-// 	// runPipeline(config, logger, *dryRun, *metricsInterval, *shutdownTimeout)
-// }
+	fs.Parse(os.Args[2:])
 
-// func validateCommand() {
-// 	fs := flag.NewFlagSet("validate", flag.ExitOnError)
-// 	configFile := fs.String("config", "config.yml", "Configuration file path")
-// 	logLevel := fs.String("loglevel", "info", "Log level (debug, info, warn, error)")
+	logger := newLogger(*logLevel)
 
-// 	fs.Parse(os.Args[2:])
+	config, err := LoadConfig(*configFile, logger)
+	if err != nil {
+		logger.Error("validation failed", "error", err)
+		os.Exit(1)
+	}
 
-// 	logLevelMap := map[string]slog.Level{
-// 		"debug": slog.LevelDebug,
-// 		"info":  slog.LevelInfo,
-// 		"warn":  slog.LevelWarn,
-// 		"error": slog.LevelError,
-// 	}
-// 	level, ok := logLevelMap[*logLevel]
-// 	if !ok {
-// 		level = slog.LevelInfo
-// 	}
+	logger.Info("configuration is valid")
+	logger.Info("Input", "topic", config.Input.Topic, "brokers", len(config.Input.Brokers))
+	logger.Info("Output", "topic", config.Output.Topic, "brokers", len(config.Output.Brokers))
+}
 
-// 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-
-// 	config, err := LoadConfig(*configFile, logger)
-// 	if err != nil {
-// 		logger.Error("Validation failed", "error", err)
-// 		os.Exit(1)
-// 	}
-
-// 	logger.Info("✓ Configuration is valid")
-// 	logger.Info("Input", "topic", config.Input.Topic, "brokers", len(config.Input.Brokers))
-// 	logger.Info("Output", "topic", config.Output.Topic, "brokers", len(config.Output.Brokers))
-// }
-
+// printUsage displays the usage information for the CLI application.
 func printUsage() {
 	fmt.Println(`EtelGo - Kafka data pipeline processor
 
@@ -153,10 +117,6 @@ Global flags:
         Log level: debug, info, warn, error (default "info")
 
 Run-specific flags:
-  -metrics-interval string
-        Interval for metrics reporting (default "30s")
-  -shutdown-timeout string
-        Graceful shutdown timeout (default "30s")
   -dry-run
         Run without writing to output (validation only)
 
