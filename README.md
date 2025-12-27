@@ -44,3 +44,28 @@ Erreurs
 Graceful shutdown (SIGTERM/SIGINT)
 Gestion d'erreurs basique (log + continue)
 Arrêt automatique si inactivité détectée
+
+
+
+
+## PHASE 1 : CONFIG                        
+
+config.yaml  →  LoadConfig()  →  Config struct (InputConfig,ProcessorConfig,OutputConfig)
+
+## PHASE 2 : CRÉATION DES COMPOSANTS            
+
+Config  →  Pipeline.NewPipeline() 
+
+NewPipeline : 
+- Consumer  ← créé depuis InputConfig
+- Processors ← créés depuis ProcessorConfig
+- Producer  ← créé depuis OutputConfig
+
+
+## PHASE 3 : ORCHESTRATION                      
+
+Pipeline.Run() → Consumer.Start() → Messages chan
+
+Pour chaque message:
+- Message → Processor 1 → Processor 2 → ... → Processor N
+- Producer.Send(message)
