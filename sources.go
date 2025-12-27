@@ -9,11 +9,11 @@ import (
 // Implémentation d'un lecteur Kafka avec la librairie Franz
 // Il faudra mettre en place un worker pool pour paraléliser au maximum
 
-func KafkaReader(brokers []string, topic string, groupID string, logger *slog.Logger) {
+func (ic *InputConfig) KafkaReader(logger *slog.Logger) {
 	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
-		kgo.ConsumerGroup(groupID),
-		kgo.ConsumeTopics(topic),
+		kgo.SeedBrokers(ic.Brokers...),
+		kgo.ConsumerGroup(ic.ConsumerGroup),
+		kgo.ConsumeTopics(ic.Topic),
 	)
 	if err != nil {
 		logger.Error("failed to create Kafka client", "error", err)
