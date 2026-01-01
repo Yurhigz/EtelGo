@@ -15,8 +15,6 @@ type Message struct {
 	Headers   map[string]string
 }
 
-// Commentaire temporaire : Ici l'interface consumer me permet de définir des
-// méthodes globales pour tous les consommateurs
 type Consumer interface {
 	Start(ctx context.Context) error
 

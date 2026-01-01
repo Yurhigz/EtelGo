@@ -6,8 +6,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Usage de wrapper franz-go pour implémenter un consommateur Kafka
-// Pattern adapter
+//type pattern Adapter for Kafka franz-go
+// The idea is to wrap franz-go's kgo.Record into our own Message type
+// to decouple our application logic from the underlying Kafka library.
+// The basic layout is within consumer.go, all the aspects of franz-go are wrapped here.
 
 func FromKafkaFranz(record *kgo.Record) *Message {
 	return &Message{
@@ -17,7 +19,13 @@ func FromKafkaFranz(record *kgo.Record) *Message {
 		Partition: record.Partition,
 		Offset:    record.Offset,
 		Timestamp: record.Timestamp,
-		// Headers:   record.Headers, // À implémenter si nécessaire
+		Headers: func() map[string]string {
+			headers := make(map[string]string)
+			for _, h := range record.Headers {
+				headers[h.Key] = string(h.Value)
+			}
+			return headers
+		}(),
 	}
 }
 
@@ -25,10 +33,18 @@ type KafkaConsumer struct {
 	client   *kgo.Client
 	messages chan *Message
 	errors   chan error
-	// ... autres champs
+	// Potentially other fields for configuration, state, etc.
 }
 
 func (kc *KafkaConsumer) Start(ctx context.Context) error {
+	fetches := kc.client.PollFetches(ctx)
+
+	errs := fetches.Errors() 
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			kc.errors <- err
+		}
 	// Utiliser kc.client.PollFetches() et envoyer dans kc.messages
 }
 
