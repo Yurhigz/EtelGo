@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -31,21 +32,53 @@ func FromKafkaFranz(record *kgo.Record) *Message {
 
 type KafkaConsumer struct {
 	client   *kgo.Client
+	logger   *slog.Logger
 	messages chan *Message
 	errors   chan error
 	// Potentially other fields for configuration, state, etc.
 }
 
-func (kc *KafkaConsumer) Start(ctx context.Context) error {
-	fetches := kc.client.PollFetches(ctx)
+func NewKafkaConsumer(cfg *InputConfig, logger *slog.Logger) (*KafkaConsumer, error) {
+	logger.Info("Creating new Kafka consumer", " brokers", cfg.Brokers, "topic", cfg.Topic, "group", cfg.ConsumerGroup)
 
-	errs := fetches.Errors() 
+	kgoOpts := []kgo.Opt{
+		kgo.SeedBrokers(cfg.Brokers...),
+		kgo.ConsumerGroup(cfg.ConsumerGroup),
+		kgo.ConsumeTopics(cfg.Topic),
+	}
+
+	client, err := kgo.NewClient(kgoOpts...)
+	if err != nil {
+		logger.Error("failed to create Kafka client", "error", err)
+		return nil, err
+	}
+
+	return &KafkaConsumer{
+		client:   client,
+		logger:   logger,
+		messages: make(chan *Message),
+		errors:   make(chan error),
+	}, nil
+}
+
+func (kc *KafkaConsumer) Start(ctx context.Context) error {
+	for {
+		fetches := kc.client.PollFetches(ctx)
+	}
+
+	errs := fetches.Errors()
 
 	if len(errs) > 0 {
 		for _, err := range errs {
 			kc.errors <- err
 		}
-	// Utiliser kc.client.PollFetches() et envoyer dans kc.messages
+	}
+	records := fetches.Records()
+	for _, record := range records {
+		kc.messages <- FromKafkaFranz(record)
+	}
+
+	return nil
 }
 
 func (kc *KafkaConsumer) Messages() <-chan *Message {
