@@ -1,6 +1,7 @@
 package main
 
 import (
+	"etelgo/config"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -61,7 +62,7 @@ func runCommand() {
 
 	logger := newLogger(*logLevel)
 
-	config, err := LoadConfig(*configFile, logger)
+	config, err := config.LoadConfig(*configFile, logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
@@ -86,7 +87,7 @@ func validateCommand() {
 
 	logger := newLogger(*logLevel)
 
-	config, err := LoadConfig(*configFile, logger)
+	config, err := config.LoadConfig(*configFile, logger)
 	if err != nil {
 		logger.Error("validation failed", "error", err)
 		os.Exit(1)
