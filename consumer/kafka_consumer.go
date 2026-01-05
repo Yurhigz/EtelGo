@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"etelgo/config"
 	"log/slog"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -38,7 +39,7 @@ type KafkaConsumer struct {
 	// Potentially other fields for configuration, state, etc.
 }
 
-func NewKafkaConsumer(cfg *InputConfig, logger *slog.Logger) (*KafkaConsumer, error) {
+func NewKafkaConsumer(cfg *config.InputConfig, logger *slog.Logger) (*KafkaConsumer, error) {
 	logger.Info("Creating new Kafka consumer", " brokers", cfg.Brokers, "topic", cfg.Topic, "group", cfg.ConsumerGroup)
 
 	kgoOpts := []kgo.Opt{
@@ -61,24 +62,46 @@ func NewKafkaConsumer(cfg *InputConfig, logger *slog.Logger) (*KafkaConsumer, er
 	}, nil
 }
 
-func (kc *KafkaConsumer) Start(ctx context.Context) error {
+func (kc *KafkaConsumer) Start(ctx context.Context) {
+	kc.logger.Info("Starting Kafka consumer")
+
+	go kc.pollMessages(ctx)
+}
+
+// Poll messages from Kafka and send them to the messages channel, multiple select patterns to handle context cancellation
+func (kc *KafkaConsumer) pollMessages(ctx context.Context) {
 	for {
-		fetches := kc.client.PollFetches(ctx)
-	}
+		select {
+		case <-ctx.Done():
+			kc.logger.Info("Kafka consumer context done, stopping polling")
+			return
+		default:
+			fetches := kc.client.PollFetches(ctx)
 
-	errs := fetches.Errors()
+			errs := fetches.Errors()
+			if len(errs) > 0 {
+				for _, err := range errs {
+					kc.logger.Error("Error fetching messages", "error", err.Err)
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						kc.errors <- err.Err
+					}
+				}
+			}
 
-	if len(errs) > 0 {
-		for _, err := range errs {
-			kc.errors <- err
+			fetches.EachRecord(func(record *kgo.Record) {
+				msg := FromKafkaFranz(record)
+
+				select {
+				case kc.messages <- msg:
+				case <-ctx.Done():
+					return
+				}
+			})
 		}
 	}
-	records := fetches.Records()
-	for _, record := range records {
-		kc.messages <- FromKafkaFranz(record)
-	}
-
-	return nil
 }
 
 func (kc *KafkaConsumer) Messages() <-chan *Message {
@@ -91,4 +114,5 @@ func (kc *KafkaConsumer) Errors() <-chan error {
 
 func (kc *KafkaConsumer) Close() error {
 	// Wrapper autour de kc.client.Close()
+	panic("unimplemented")
 }
