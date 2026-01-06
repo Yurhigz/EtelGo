@@ -44,7 +44,7 @@ type InputConfig struct {
 	ConsumerGroup  string   `yaml:"consumer_group_id"`   // Consumer group ID for offset management
 	Format         string   `yaml:"format"`              // Message format: "json", "avro", "protobuf", or "string"
 	SchemaRegistry string   `yaml:"schema_registry_url"` // Schema registry URL (required for avro/protobuf formats)
-	Workers        int      `yaml:"workers"`             // Number of parallel consumer workers
+	Workers        int      `yaml:"workers"`             // Number of parallel workers
 
 	// Optional fields
 	Offset_reset         *string `yaml:"offset_reset,omitempty"`         // Offset reset strategy: "earliest" or "latest" (default: "latest")

@@ -83,10 +83,9 @@ func (kc *KafkaConsumer) pollMessages(ctx context.Context) {
 				for _, err := range errs {
 					kc.logger.Error("Error fetching messages", "error", err.Err)
 					select {
+					case kc.errors <- err.Err:
 					case <-ctx.Done():
 						return
-					default:
-						kc.errors <- err.Err
 					}
 				}
 			}
