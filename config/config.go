@@ -14,9 +14,9 @@ import (
 // with appropriate data types.
 
 type Config struct {
-	Input     InputConfig
-	Processor ProcessorConfig
-	Output    OutputConfig
+	Input      InputConfig
+	Processors []ProcessorConfig
+	Output     OutputConfig
 }
 
 type Format string
@@ -26,6 +26,15 @@ const (
 	FormatAvro   Format = "avro"
 	FormatProto  Format = "protobuf"
 	FormatString Format = "string"
+)
+
+const (
+	ProcessorTypeTimestampReplay = "timestamp_replay"
+	ProcessorTypeDrop            = "drop"
+	ProcessorTypeTransform       = "transform"
+	ProcessorTypeEnrich          = "enrich"
+	ProcessorTypeFilter          = "filter"
+	ProcessorTypePassthrough     = "passthrough"
 )
 
 var ValidFormats = map[Format]bool{
@@ -61,6 +70,8 @@ type InputConfig struct {
 // ProcessorConfig holds the pipeline processor configuration
 // Currently no mandatory or optional fields defined
 type ProcessorConfig struct {
+	Type   string                 `yaml:"type,omitempty"` // Processor type : e.g., "filter", "transform"
+	Config map[string]interface{} `yaml:"config,omitempty"`
 }
 
 // OutputConfig holds Kafka producer configuration
@@ -315,8 +326,85 @@ func (oc *OutputConfig) Validate(logger *slog.Logger) error {
 	return nil
 }
 
-func (pc *ProcessorConfig) Validate(logger *slog.Logger) error {
+type ProcessorValidator interface {
+	Validate(config map[string]interface{}, logger *slog.Logger) error
+}
+
+// Validators mapping for different processor types and to provide an easier implementation of the Validate method
+var processorValidators = map[string]ProcessorValidator{
+	ProcessorTypeTimestampReplay: &TimestampReplayValidator{},
+	ProcessorTypeFilter:          &FilterValidator{},
+	ProcessorTypeTransform:       &TransformValidator{},
+	ProcessorTypeDrop:            &DropValidator{},
+	ProcessorTypeEnrich:          &EnrichValidator{},
+	ProcessorTypePassthrough:     &PassthroughValidator{},
+}
+
+type TimestampReplayValidator struct{}
+
+func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	hasTargetTimestamp := cfg["target_timestamp"] != nil
+	hasOffset := cfg["offset"] != nil
+	hasUnit := cfg["unit"] != nil
+
+	if !hasTargetTimestamp && !hasOffset {
+		logger.Error("timestamp_replay validation failed: must provide either 'target_timestamp' or 'offset'")
+		return fmt.Errorf("timestamp_replay: must provide either 'target_timestamp' or 'offset' but not both")
+	}
+
+	if hasOffset && !hasUnit {
+		logger.Error("timestamp_replay validation failed: 'unit' is required when using 'offset'")
+		return fmt.Errorf("timestamp_replay: 'unit' is required when using 'offset'")
+	}
+
 	return nil
+}
+
+// -- MUST BE IMPLEMENTED --
+type FilterValidator struct{}
+
+func (v *FilterValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	panic("Not implemented")
+}
+
+type TransformValidator struct{}
+
+func (v *TransformValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	panic("Not implemented")
+}
+
+type DropValidator struct{}
+
+func (v *DropValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	panic("Not implemented")
+}
+
+type EnrichValidator struct{}
+
+func (v *EnrichValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	panic("Not implemented")
+}
+
+type PassthroughValidator struct{}
+
+func (v *PassthroughValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	panic("Not implemented")
+}
+
+// END -- MUST BE IMPLEMENTED --
+
+func (pc *ProcessorConfig) Validate(logger *slog.Logger) error {
+	if pc.Type == "" {
+		logger.Warn("ProcessorConfig validation skipped: Type is empty")
+	}
+
+	validator, exists := processorValidators[pc.Type]
+	if !exists {
+		logger.Warn("Unknown processor type, skipping validation", "type", pc.Type)
+		return nil
+	}
+
+	return validator.Validate(pc.Config, logger)
 }
 
 func LoadConfig(filePath string, logger *slog.Logger) (*Config, error) {
@@ -342,8 +430,13 @@ func LoadConfig(filePath string, logger *slog.Logger) (*Config, error) {
 		return nil, fmt.Errorf("output validation failed: %w", err)
 	}
 
-	if err := cfg.Processor.Validate(logger); err != nil {
-		return nil, fmt.Errorf("processor validation failed: %w", err)
+	for i, processorcfg := range cfg.Processors {
+		logger.Info("Validating processor", "type", processorcfg.Type)
+		err := processorcfg.Validate(logger)
+		if err != nil {
+			return nil, fmt.Errorf("processor %d validation failed: %w", i, err)
+		}
 	}
+
 	return cfg, nil
 }
