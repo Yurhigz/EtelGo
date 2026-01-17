@@ -6,20 +6,7 @@ import (
 	"testing"
 )
 
-// Boilerplate test to be implemented later, using the config loading function
-// func TestConfigLoading(t *testing.T) {
-
-// 	tests := []struct {
-// 		name   string
-// 		config Config
-// 	}{}
-
-// 	for _, tt := range tests {
-
-// 	}
-// 	t.Log("Config loading test placeholder")
-// }
-
+// Input Validation tests for InputConfig
 func TestValidateInput(t *testing.T) {
 
 	// Using a discarding logger to avoid spamming test output
@@ -72,6 +59,7 @@ func TestValidateInput(t *testing.T) {
 	}
 }
 
+// Output Validation tests for OutputConfig
 func TestValidateOutput(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -273,4 +261,49 @@ func TestValidateOutput(t *testing.T) {
 		})
 	}
 
+}
+
+// Validations tests for ProcessorConfig
+func TestValidateProcessors(t *testing.T) {
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	tests := []struct {
+		name    string
+		config  ProcessorConfig
+		wantErr bool
+	}{
+		{
+			name: "Valid target_timestamp parameter - TimestampReplay processor",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"target_timestamp": "event_time"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid offset parameter - TimestampReplay processor",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"offset": 100, "unit": "seconds"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate(logger)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Validate() error = nil, wantErr = true")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Validate() unexpected error = %v", err)
+				return
+			}
+		})
+	}
 }
