@@ -33,7 +33,6 @@ const (
 	ProcessorTypeDrop            = "drop"
 	ProcessorTypeTransform       = "transform"
 	ProcessorTypeEnrich          = "enrich"
-	ProcessorTypeFilter          = "filter"
 	ProcessorTypePassthrough     = "passthrough"
 )
 
@@ -333,7 +332,6 @@ type ProcessorValidator interface {
 // Validators mapping for different processor types and to provide an easier implementation of the Validate method
 var processorValidators = map[string]ProcessorValidator{
 	ProcessorTypeTimestampReplay: &TimestampReplayValidator{},
-	ProcessorTypeFilter:          &FilterValidator{},
 	ProcessorTypeTransform:       &TransformValidator{},
 	ProcessorTypeDrop:            &DropValidator{},
 	ProcessorTypeEnrich:          &EnrichValidator{},
@@ -360,38 +358,61 @@ func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *
 	return nil
 }
 
-// -- MUST BE IMPLEMENTED --
-type FilterValidator struct{}
-
-func (v *FilterValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	panic("Not implemented")
-}
-
 type TransformValidator struct{}
 
+// TransformValidator has two specifics fields :
+// fieldName : string (the field to modify/transform)
+// operation : string (e.g., "uppercase", "lowercase", "add_prefix", "add_suffix")
 func (v *TransformValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	panic("Not implemented")
+	hasFieldName := cfg["field_name"] != nil
+	hasOperation := cfg["operation"] != nil
+
+	if !hasFieldName || !hasOperation {
+		logger.Error("transform validation failed: both 'field_name' and 'operation' are required")
+		return fmt.Errorf("transform: both 'field_name' and 'operation' are required")
+	}
+	return nil
 }
 
 type DropValidator struct{}
 
+// DropValidator has two specifics fields :
+// filterCriteria : string (e.g., "field_name=<filterCriteria")
+// fieldName : string (e.g., "<field_name>=filterCriteria")
 func (v *DropValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	panic("Not implemented")
+	hasFieldName := cfg["field_name"] != nil
+	hasFilterCriteria := cfg["filter_criteria"] != nil
+
+	if !hasFieldName || !hasFilterCriteria {
+		logger.Error("drop validation failed: both 'field_name' and 'filter_criteria' are required")
+		return fmt.Errorf("drop: both 'field_name' and 'filter_criteria' are required")
+	}
+
+	return nil
 }
 
 type EnrichValidator struct{}
 
+// EnrichValidator has two specifics fields :
+// fieldName : string (A new for the new field to add)
+// fieldValue : interface{} (The value to set to the new field)
 func (v *EnrichValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	panic("Not implemented")
+	hasFieldName := cfg["field_name"] != nil
+	hasFieldValue := cfg["field_value"] != nil
+	if !hasFieldName || !hasFieldValue {
+		logger.Error("enrich validation failed: both 'field_name' and 'field_value' are required")
+		return fmt.Errorf("enrich: both 'field_name' and 'field_value' are required")
+	}
+	return nil
 }
 
 type PassthroughValidator struct{}
 
+// PassthroughValidator has no specific fields.
+// Simply passes messages without any modifications.
 func (v *PassthroughValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	panic("Not implemented")
+	return nil
 }
-
-// END -- MUST BE IMPLEMENTED --
 
 func (pc *ProcessorConfig) Validate(logger *slog.Logger) error {
 	if pc.Type == "" {
