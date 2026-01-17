@@ -122,14 +122,38 @@ func (p *TimestampReplayProcessor) Process(msg *consumer.Message) (*consumer.Mes
 				p.logger.Error("invalid time unit", "unit", *p.Unit)
 				return nil, err
 			}
-	}
+			msg.Timestamp = msg.Timestamp.Add(duration)
+		}
 
+	}
 	return msg, nil
 }
 
 // DropProcessor drops messages based on certain criteria.
+type DropProcessor struct {
+	filterCriteria string
+	fieldName      string
+	logger         *slog.Logger
+}
+
+// I'll suppose that nil message means drop in my producer
 func NewDropProcessor(cfg ProcessorConfig) (Processor, error) {
-	panic("Not implemented")
+	processor := &DropProcessor{
+		logger: cfg.logger,
+	}
+
+	criteria, ok := cfg.Config["filter_criteria"]
+	if ok {
+		strVal, ok := criteria.(string)
+		if ok {
+			processor.filterCriteria = strVal
+		}
+	}
+
+}
+
+func (p *DropProcessor) Name() string {
+	return ProcessorTypeDrop
 }
 
 // TransformProcessor modifies message content by modifying mentioned fields' values.
@@ -139,11 +163,6 @@ func NewTransformProcessor(cfg ProcessorConfig) (Processor, error) {
 
 // EnrichProcessor adds additional data to messages from external sources or predefined values.
 func NewEnrichProcessor(cfg ProcessorConfig) (Processor, error) {
-	panic("Not implemented")
-}
-
-// FilterProcessor filters messages based on specific conditions.
-func NewFilterProcessor(cfg ProcessorConfig) (Processor, error) {
 	panic("Not implemented")
 }
 
