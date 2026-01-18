@@ -273,8 +273,9 @@ func TestValidateProcessors(t *testing.T) {
 		config  ProcessorConfig
 		wantErr bool
 	}{
+		// TimestampReplay Processor tests
 		{
-			name: "Valid target_timestamp parameter - TimestampReplay processor",
+			name: "[TimestampReplay] Valid target_timestamp parameter",
 			config: ProcessorConfig{
 				Type:   "timestamp_replay",
 				Config: map[string]interface{}{"target_timestamp": "event_time"},
@@ -282,12 +283,117 @@ func TestValidateProcessors(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Valid offset parameter - TimestampReplay processor",
+			name: "[TimestampReplay] Invalid target_timestamp parameter",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"target_timestamps": "event_time"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "[TimestampReplay] Valid offset parameter",
 			config: ProcessorConfig{
 				Type:   "timestamp_replay",
 				Config: map[string]interface{}{"offset": 100, "unit": "seconds"},
 			},
 			wantErr: false,
+		},
+		{
+			name: "[TimestampReplay] Both Invalid offset parameter",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"offsets": 100, "units": "seconds"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "[TimestampReplay] One Invalid offset parameter",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"offsets": 100, "unit": "seconds"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "[TimestampReplay] One Invalid offset parameter",
+			config: ProcessorConfig{
+				Type:   "timestamp_replay",
+				Config: map[string]interface{}{"offset": 100, "units": "seconds"},
+			},
+			wantErr: true,
+		},
+		// Drop Validator processor tests
+		{
+			name: "[DropValidator] Valid condition parameter",
+			config: ProcessorConfig{
+				Type:   "drop",
+				Config: map[string]interface{}{"field_name": "test_field", "filter_criteria": "json"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "[DropValidator] Invalid field_name parameter",
+			config: ProcessorConfig{
+				Type:   "drop",
+				Config: map[string]interface{}{"field_names": "test_field", "filter_criteria": "json"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "[DropValidator] Invalid filter_criteria parameter",
+			config: ProcessorConfig{
+				Type:   "drop",
+				Config: map[string]interface{}{"field_name": "test_field", "filter_criterias": "json"},
+			},
+			wantErr: true,
+		},
+
+		// Enrich Validator processor tests
+		{
+			name: "[EnrichValidator] Valid parameters",
+			config: ProcessorConfig{
+				Type: "enrich",
+				Config: map[string]interface{}{
+					"field_name": "test_field", "field_value": "value",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "[EnrichValidator] Invalid field_name parameter",
+			config: ProcessorConfig{
+				Type: "enrich",
+				Config: map[string]interface{}{
+					"field_names": "test_field", "field_value": "value",
+				},
+			},
+			wantErr: true,
+		},
+		// Passthrough Validator Processor tests
+		{
+			name: "Passthrough Processor - No parameters",
+			config: ProcessorConfig{
+				Type:   "passthrough",
+				Config: map[string]interface{}{},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Passthrough Processor - With parameters",
+			config: ProcessorConfig{
+				Type:   "passthrough",
+				Config: map[string]interface{}{"some_param": "some_value"},
+			},
+			wantErr: false,
+		},
+		// Unknown Processor Type
+		{
+			name: "Unknown Processor Type",
+			config: ProcessorConfig{
+				Type:   "unknown_processor",
+				Config: map[string]interface{}{},
+			},
+			wantErr: true,
 		},
 	}
 
