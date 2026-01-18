@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -421,8 +422,8 @@ func (pc *ProcessorConfig) Validate(logger *slog.Logger) error {
 
 	validator, exists := processorValidators[pc.Type]
 	if !exists {
-		logger.Warn("Unknown processor type, skipping validation", "type", pc.Type)
-		return nil
+		logger.Error("Unknown processor type, skipping validation", "type", pc.Type)
+		return errors.New("unknown processor type: " + pc.Type)
 	}
 
 	return validator.Validate(pc.Config, logger)
