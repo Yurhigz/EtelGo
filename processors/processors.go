@@ -39,8 +39,6 @@ func NewProcessor(cfg ProcessorConfig, logger *slog.Logger) (Processor, error) {
 		return NewTransformProcessor(cfg)
 	case ProcessorTypeEnrich:
 		return NewEnrichProcessor(cfg)
-	case ProcessorTypeFilter:
-		return NewFilterProcessor(cfg)
 	case ProcessorTypePassthrough:
 		return NewPassthroughProcessor(cfg), nil
 	default:
@@ -52,6 +50,7 @@ func NewProcessor(cfg ProcessorConfig, logger *slog.Logger) (Processor, error) {
 // TimestampReplayProcessor is used to replay messages based on their original timestamps
 // and a period of time defined by the user.
 type TimestampReplayProcessor struct {
+
 	// Option 1 : specific timestamps to replay at
 	TargetTimestamps *string // Must respect the ISO 8601 format
 	// Option 2 : an offset to replay messages
@@ -96,6 +95,8 @@ func (p *TimestampReplayProcessor) Name() string {
 }
 
 // Process can replay messages based on the options defined in the processor.
+// This processer basically applies to every message where there is a timestamp field correspond to the field name used in the configuration.
+
 func (p *TimestampReplayProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
 	p.logger.Info("TimestampReplayProcessor: processing message for timestamp replay")
 	// Dual logic based on the options provided
@@ -136,7 +137,7 @@ type DropProcessor struct {
 	logger         *slog.Logger
 }
 
-// I'll suppose that nil message means drop in my producer
+// NewDropProcessor creates a new DropProcessor with the given configuration.
 func NewDropProcessor(cfg ProcessorConfig) (Processor, error) {
 	processor := &DropProcessor{
 		logger: cfg.logger,
@@ -150,6 +151,24 @@ func NewDropProcessor(cfg ProcessorConfig) (Processor, error) {
 		}
 	}
 
+	fieldname, ok := cfg.Config["field_name"]
+	if ok {
+		strVal, ok := fieldname.(string)
+		if ok {
+			processor.fieldName = strVal
+		}
+	}
+	return processor, nil
+
+}
+
+func (p *DropProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
+	if p.fieldName == "" || p.filterCriteria == "" {
+		return msg, nil // No criteria defined, do not drop
+	} 
+
+	if 
+	panic("Not implemented")
 }
 
 func (p *DropProcessor) Name() string {
