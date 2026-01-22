@@ -372,6 +372,12 @@ func (v *TransformValidator) Validate(cfg map[string]interface{}, logger *slog.L
 		logger.Error("transform validation failed: both 'field_name' and 'operation' are required")
 		return fmt.Errorf("transform: both 'field_name' and 'operation' are required")
 	}
+
+	if (cfg["operation"] == "add_prefix" && cfg["prefix"] == nil) || (cfg["operation"] == "add_suffix" && cfg["suffix"] == nil) {
+		logger.Error("transform validation failed: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
+		return fmt.Errorf("transform: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
+	}
+
 	return nil
 }
 
