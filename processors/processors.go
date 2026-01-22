@@ -4,6 +4,7 @@ import (
 	"errors"
 	"etelgo/consumer"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,22 @@ const (
 	ProcessorTypeFilter          = "filter"
 	ProcessorTypePassthrough     = "passthrough"
 )
+
+type TransformationOperation string
+
+const (
+	OperationUppercase TransformationOperation = "uppercase"
+	OperationLowercase TransformationOperation = "lowercase"
+	OperationAddPrefix TransformationOperation = "add_prefix"
+	OperationAddSuffix TransformationOperation = "add_suffix"
+)
+
+var ValidTransformOperations = map[TransformationOperation]bool{
+	OperationUppercase: true,
+	OperationLowercase: true,
+	OperationAddPrefix: true,
+	OperationAddSuffix: true,
+}
 
 type ProcessorConfig struct {
 	Type   string                 `yaml:"type"`
@@ -163,21 +180,96 @@ func NewDropProcessor(cfg ProcessorConfig) (Processor, error) {
 }
 
 func (p *DropProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
-	if p.fieldName == "" || p.filterCriteria == "" {
-		return msg, nil // No criteria defined, do not drop
-	} 
+	if p.fieldName != "" && p.filterCriteria != "" {
+		val, ok := msg.ValueFields[p.fieldName]
+		if ok {
+			strVal, ok := val.(string)
+			if ok && strVal == p.filterCriteria {
+				return nil, nil
+			}
+		}
+	}
 
-	if 
-	panic("Not implemented")
+	return msg, nil
+
 }
 
 func (p *DropProcessor) Name() string {
 	return ProcessorTypeDrop
 }
 
+// Transform operation types function
+func applyTransformation(value interface{}, operation string, params map[string]interface{}) (interface{}, error) {
+	strVal, ok := value.(string)
+	if !ok {
+		return value, nil
+	}
+	switch operation {
+	case "uppercase":
+		return strings.ToUpper(strVal), nil
+	case "lowercase":
+		return strings.ToLower(strVal), nil
+	case "add_prefix":
+		prefix, ok := params["prefix"].(string)
+		if !ok {
+			return value, errors.New("missing or invalid 'prefix' parameter for add_prefix operation")
+		}
+		return prefix + strVal, nil
+	case "add_suffix":
+		suffix, ok := params["suffix"].(string)
+		if !ok {
+			return value, errors.New("missing or invalid 'suffix' parameter for add_suffix operation")
+		}
+		return strVal + suffix, nil
+	default:
+		return value, errors.New("unknown transformation operation: " + operation)
+	}
+}
+
 // TransformProcessor modifies message content by modifying mentioned fields' values.
+type TransformProcessor struct {
+	logger    *slog.Logger
+	fieldName string
+	operation string
+	params    map[string]interface{}
+}
+
 func NewTransformProcessor(cfg ProcessorConfig) (Processor, error) {
-	panic("Not implemented")
+	processor := &TransformProcessor{
+		logger: cfg.logger,
+	}
+
+	fieldname, ok := cfg.Config["field_name"]
+	if ok {
+		strVal, ok := fieldname.(string)
+		if ok {
+			processor.fieldName = strVal
+		}
+	}
+
+	operation, ok := cfg.Config["operation"]
+	if ok {
+		strVal, ok := operation.(string)
+		if ok {
+			if !ValidTransformOperations[TransformationOperation(strVal)] {
+				return nil, errors.New("invalid transformation operation: " + strVal)
+			}
+			processor.operation = strVal
+		}
+	}
+
+	processor.params = cfg.Config["params"].(map[string]interface{})
+
+	return processor, nil
+}
+
+// Work in progress
+func (p *TransformProcessor) Name() string {
+	return ProcessorTypeTransform
+}
+
+func (p *TransformProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
+	return msg, nil
 }
 
 // EnrichProcessor adds additional data to messages from external sources or predefined values.
