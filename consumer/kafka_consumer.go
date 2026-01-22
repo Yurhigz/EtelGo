@@ -93,6 +93,19 @@ func (kc *KafkaConsumer) pollMessages(ctx context.Context) {
 			fetches.EachRecord(func(record *kgo.Record) {
 				msg := FromKafkaFranz(record)
 
+				deserializer := NewDeserializer("json") // For now, hardcoded to JSON
+				valueFields, err := deserializer.Deserialize(msg.Value)
+				if err != nil {
+					kc.logger.Error("failed to deserialize message value", "error", err)
+					select {
+					case kc.errors <- err:
+					case <-ctx.Done():
+						return
+					}
+				} else {
+					msg.ValueFields = valueFields
+				}
+
 				select {
 				case kc.messages <- msg:
 				case <-ctx.Done():
