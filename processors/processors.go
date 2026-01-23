@@ -263,18 +263,72 @@ func NewTransformProcessor(cfg ProcessorConfig) (Processor, error) {
 	return processor, nil
 }
 
-// Work in progress
 func (p *TransformProcessor) Name() string {
 	return ProcessorTypeTransform
 }
 
 func (p *TransformProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
+	if p.fieldName == "" || p.operation == "" {
+		p.logger.Warn("TransformProcessor: missing field_name or operation configuration")
+		return msg, nil
+	}
+
+	val, ok := msg.ValueFields[p.fieldName]
+	if !ok {
+		return msg, nil
+	}
+
+	newVal, err := applyTransformation(val, p.operation, p.params)
+	if err != nil {
+		p.logger.Error("TransformProcessor: failed to apply transformation", "error", err)
+		return nil, err
+	}
+	msg.ValueFields[p.fieldName] = newVal
+
 	return msg, nil
 }
 
 // EnrichProcessor adds additional data to messages from external sources or predefined values.
+// add_fields and values
+type EnrichProcessor struct {
+	logger          *slog.Logger
+	addedFieldName  string
+	addedFieldValue interface{}
+}
+
 func NewEnrichProcessor(cfg ProcessorConfig) (Processor, error) {
-	panic("Not implemented")
+	processor := &EnrichProcessor{
+		logger: cfg.logger,
+	}
+
+	fieldname, ok := cfg.Config["added_field_name"]
+	if ok {
+		strVal, ok := fieldname.(string)
+		if ok {
+			processor.addedFieldName = strVal
+		}
+	}
+
+	fieldvalue, ok := cfg.Config["added_field_value"]
+	if ok {
+		processor.addedFieldValue = fieldvalue
+	}
+
+	return processor, nil
+}
+
+func (p *EnrichProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
+	if p.addedFieldName == "" || p.addedFieldValue == nil {
+		p.logger.Warn("EnrichProcessor: missing added_field_name or added_field_value configuration")
+		return msg, nil
+	}
+
+	msg.ValueFields[p.addedFieldName] = p.addedFieldValue
+	return msg, nil
+}
+
+func (p *EnrichProcessor) Name() string {
+	return ProcessorTypeEnrich
 }
 
 // PassthroughProcessor forwards messages without any modifications.
