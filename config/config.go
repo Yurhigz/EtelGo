@@ -339,7 +339,21 @@ var processorValidators = map[string]ProcessorValidator{
 	ProcessorTypePassthrough:     &PassthroughValidator{},
 }
 
+// ====== TIMESTAMP REPLAY VALIDATOR ====== //
+
 type TimestampReplayValidator struct{}
+
+var availableUnits = map[string]bool{
+	"microseconds": true,
+	"milliseconds": true,
+	"seconds":      true,
+	"minutes":      true,
+	"hours":        true,
+	"days":         true,
+	"weeks":        true,
+	"months":       true,
+	"years":        true,
+}
 
 func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
 	hasTargetTimestamp := cfg["target_timestamp"] != nil
@@ -351,35 +365,45 @@ func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *
 		return fmt.Errorf("timestamp_replay: must provide either 'target_timestamp' or 'offset' but not both")
 	}
 
+	if hasTargetTimestamp && hasOffset {
+		logger.Error("timestamp_replay validation failed: cannot provide both 'target_timestamp' and 'offset'")
+		return fmt.Errorf("timestamp_replay: cannot provide both 'target_timestamp' and 'offset'")
+	}
+
 	if hasOffset && !hasUnit {
 		logger.Error("timestamp_replay validation failed: 'unit' is required when using 'offset'")
 		return fmt.Errorf("timestamp_replay: 'unit' is required when using 'offset'")
 	}
 
+	if hasTargetTimestamp {
+		parsedtimestamp, err := time.Parse(time.RFC3339, cfg["target_timestamp"].(string))
+		if err != nil {
+			logger.Error("timestamp_replay validation failed: invalid target_timestamp format", "error", err)
+			return fmt.Errorf("timestamp_replay: invalid target_timestamp format: %w", err)
+		}
+
+		cfg["parsed_timestamp"] = parsedtimestamp
+	}
+
+	if hasOffset {
+		offset, ok := cfg["offset"]
+		switch offset.(type) {
+		case int, int64:
+		default:
+			logger.Error("timestamp_replay validation failed: 'offset' must be an integer")
+			return fmt.Errorf("offset must be an integer")
+		}
+		unitStr, ok := cfg["unit"].(string)
+		if !ok || !availableUnits[unitStr] {
+			logger.Error("timestamp_replay validation failed: invalid 'unit' value", "value", cfg["unit"])
+			return fmt.Errorf("timestamp_replay: invalid 'unit' value: %v", cfg["unit"])
+		}
+	}
+
 	return nil
 }
 
-type TransformValidator struct{}
-
-// TransformValidator has two specifics fields :
-// fieldName : string (the field to modify/transform)
-// operation : string (e.g., "uppercase", "lowercase", "add_prefix", "add_suffix")
-func (v *TransformValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
-	hasFieldName := cfg["field_name"] != nil
-	hasOperation := cfg["operation"] != nil
-
-	if !hasFieldName || !hasOperation {
-		logger.Error("transform validation failed: both 'field_name' and 'operation' are required")
-		return fmt.Errorf("transform: both 'field_name' and 'operation' are required")
-	}
-
-	if (cfg["operation"] == "add_prefix" && cfg["prefix"] == nil) || (cfg["operation"] == "add_suffix" && cfg["suffix"] == nil) {
-		logger.Error("transform validation failed: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
-		return fmt.Errorf("transform: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
-	}
-
-	return nil
-}
+// ====== DROP VALIDATOR ====== //
 
 type DropValidator struct{}
 
@@ -395,8 +419,82 @@ func (v *DropValidator) Validate(cfg map[string]interface{}, logger *slog.Logger
 		return fmt.Errorf("drop: both 'field_name' and 'filter_criteria' are required")
 	}
 
+	if _, ok := cfg["filter_criteria"].(string); !ok {
+		logger.Error("drop validation failed: 'filter_criteria' must be a string")
+		return fmt.Errorf("drop: 'filter_criteria' must be a string")
+	}
+
+	if _, ok := cfg["field_name"].(string); !ok {
+		logger.Error("drop validation failed: 'field_name' must be a string")
+		return fmt.Errorf("drop: 'field_name' must be a string")
+	}
+
 	return nil
 }
+
+// ====== TRANSFORM VALIDATOR ====== //
+
+type TransformValidator struct{}
+
+var availableOperations = map[string]bool{
+	"uppercase":  true,
+	"lowercase":  true,
+	"add_prefix": true,
+	"add_suffix": true,
+}
+
+// TransformValidator has two specifics fields :
+// fieldName : string (the field to modify/transform)
+// operation : string (e.g., "uppercase", "lowercase", "add_prefix", "add_suffix")
+// prefix : string (the prefix to add, required if operation is "add_prefix")
+// suffix : string (the suffix to add, required if operation is "add_suffix")
+func (v *TransformValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
+	hasFieldName := cfg["field_name"] != nil
+	hasOperation := cfg["operation"] != nil
+
+	if !hasFieldName || !hasOperation {
+		logger.Error("transform validation failed: both 'field_name' and 'operation' are required")
+		return fmt.Errorf("transform: both 'field_name' and 'operation' are required")
+	}
+
+	if _, ok := cfg["field_name"].(string); !ok {
+		logger.Error("transform validation failed: 'field_name' must be a string")
+		return fmt.Errorf("transform: 'field_name' must be a string")
+	}
+
+	if _, ok := cfg["operation"].(string); !ok {
+		logger.Error("transform validation failed: 'operation' must be a string")
+		return fmt.Errorf("transform: 'operation' must be a string")
+	}
+
+	if availableOperations[cfg["operation"].(string)] == false {
+		logger.Error("transform validation failed: invalid 'operation' value", "value", cfg["operation"])
+		return fmt.Errorf("transform: invalid 'operation' value: %v", cfg["operation"])
+	}
+
+	if (cfg["operation"] == "add_prefix" && cfg["prefix"] == nil) || (cfg["operation"] == "add_suffix" && cfg["suffix"] == nil) {
+		logger.Error("transform validation failed: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
+		return fmt.Errorf("transform: 'prefix' or 'suffix' is required for 'add_prefix' or 'add_suffix'")
+	}
+
+	if cfg["operation"] == "add_prefix" {
+		if _, ok := cfg["prefix"].(string); !ok {
+			logger.Error("transform validation failed: 'prefix' must be a string")
+			return fmt.Errorf("transform: 'prefix' must be a string")
+		}
+	}
+
+	if cfg["operation"] == "add_suffix" {
+		if _, ok := cfg["suffix"].(string); !ok {
+			logger.Error("transform validation failed: 'suffix' must be a string")
+			return fmt.Errorf("transform: 'suffix' must be a string")
+		}
+	}
+
+	return nil
+}
+
+// ====== ENRICH VALIDATOR ====== //
 
 type EnrichValidator struct{}
 
@@ -410,8 +508,16 @@ func (v *EnrichValidator) Validate(cfg map[string]interface{}, logger *slog.Logg
 		logger.Error("enrich validation failed: both 'field_name' and 'field_value' are required")
 		return fmt.Errorf("enrich: both 'field_name' and 'field_value' are required")
 	}
+
+	if _, ok := cfg["field_name"].(string); !ok {
+		logger.Error("enrich validation failed: 'field_name' must be a string")
+		return fmt.Errorf("enrich: 'field_name' must be a string")
+	}
+
 	return nil
 }
+
+// ====== PASSTHROUGH VALIDATOR ====== //
 
 type PassthroughValidator struct{}
 
@@ -421,6 +527,7 @@ func (v *PassthroughValidator) Validate(cfg map[string]interface{}, logger *slog
 	return nil
 }
 
+// Validate method for ProcessorConfig
 func (pc *ProcessorConfig) Validate(logger *slog.Logger) error {
 	if pc.Type == "" {
 		logger.Warn("ProcessorConfig validation skipped: Type is empty")
