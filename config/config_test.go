@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Input Validation tests for InputConfig
+// ==================== Input Validation tests for InputConfig ====================
 func TestValidateInput(t *testing.T) {
 
 	// Using a discarding logger to avoid spamming test output
