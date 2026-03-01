@@ -2,19 +2,11 @@ package processors
 
 import (
 	"errors"
+	"etelgo/config"
 	"etelgo/consumer"
 	"log/slog"
 	"strings"
 	"time"
-)
-
-const (
-	ProcessorTypeTimestampReplay = "timestamp_replay"
-	ProcessorTypeDrop            = "drop"
-	ProcessorTypeTransform       = "transform"
-	ProcessorTypeEnrich          = "enrich"
-	ProcessorTypeFilter          = "filter"
-	ProcessorTypePassthrough     = "passthrough"
 )
 
 type TransformationOperation string
@@ -48,15 +40,17 @@ type Processor interface {
 func NewProcessor(cfg ProcessorConfig, logger *slog.Logger) (Processor, error) {
 	cfg.logger = logger
 	switch cfg.Type {
-	case ProcessorTypeTimestampReplay:
+	case config.ProcessorTypeTimestampReplay:
 		return NewTimestampReplayProcessor(cfg)
-	case ProcessorTypeDrop:
+	case config.ProcessorTypeDrop:
 		return NewDropProcessor(cfg)
-	case ProcessorTypeTransform:
+	case config.ProcessorTypeTransform:
 		return NewTransformProcessor(cfg)
-	case ProcessorTypeEnrich:
+	case config.ProcessorTypeEnrich:
 		return NewEnrichProcessor(cfg)
-	case ProcessorTypePassthrough:
+	// case config.ProcessorTypeFilter:
+	// 	return NewFilterProcessor(cfg)
+	case config.ProcessorTypePassthrough:
 		return NewPassthroughProcessor(cfg), nil
 	default:
 		logger.Error("unknown processor type", slog.String("type", cfg.Type))
@@ -108,7 +102,7 @@ func NewTimestampReplayProcessor(cfg ProcessorConfig) (Processor, error) {
 }
 
 func (p *TimestampReplayProcessor) Name() string {
-	return ProcessorTypeTimestampReplay
+	return config.ProcessorTypeTimestampReplay
 }
 
 // Process can replay messages based on the options defined in the processor.
@@ -195,7 +189,7 @@ func (p *DropProcessor) Process(msg *consumer.Message) (*consumer.Message, error
 }
 
 func (p *DropProcessor) Name() string {
-	return ProcessorTypeDrop
+	return config.ProcessorTypeDrop
 }
 
 // Transform operation types function
@@ -264,7 +258,7 @@ func NewTransformProcessor(cfg ProcessorConfig) (Processor, error) {
 }
 
 func (p *TransformProcessor) Name() string {
-	return ProcessorTypeTransform
+	return config.ProcessorTypeTransform
 }
 
 func (p *TransformProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
@@ -328,7 +322,7 @@ func (p *EnrichProcessor) Process(msg *consumer.Message) (*consumer.Message, err
 }
 
 func (p *EnrichProcessor) Name() string {
-	return ProcessorTypeEnrich
+	return config.ProcessorTypeEnrich
 }
 
 // PassthroughProcessor forwards messages without any modifications.
@@ -348,5 +342,5 @@ func (p *PassthroughProcessor) Process(msg *consumer.Message) (*consumer.Message
 }
 
 func (p *PassthroughProcessor) Name() string {
-	return ProcessorTypePassthrough
+	return config.ProcessorTypePassthrough
 }
