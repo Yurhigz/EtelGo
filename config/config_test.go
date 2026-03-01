@@ -278,7 +278,7 @@ func TestValidateProcessors(t *testing.T) {
 			name: "[TimestampReplay] Valid target_timestamp parameter",
 			config: ProcessorConfig{
 				Type:   "timestamp_replay",
-				Config: map[string]interface{}{"target_timestamp": "event_time"},
+				Config: map[string]interface{}{"target_timestamp": "2023-01-01T00:00:00Z"},
 			},
 			wantErr: false,
 		},
@@ -286,7 +286,7 @@ func TestValidateProcessors(t *testing.T) {
 			name: "[TimestampReplay] Invalid target_timestamp parameter",
 			config: ProcessorConfig{
 				Type:   "timestamp_replay",
-				Config: map[string]interface{}{"target_timestamps": "event_time"},
+				Config: map[string]interface{}{"target_timestamps": "2023-01-01T00:00:00Z"},
 			},
 			wantErr: true,
 		},

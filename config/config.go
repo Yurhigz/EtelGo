@@ -34,6 +34,7 @@ const (
 	ProcessorTypeDrop            = "drop"
 	ProcessorTypeTransform       = "transform"
 	ProcessorTypeEnrich          = "enrich"
+	ProcessorTypeFilter          = "filter"
 	ProcessorTypePassthrough     = "passthrough"
 )
 
@@ -270,7 +271,6 @@ func (oc *OutputConfig) Validate(logger *slog.Logger) error {
 		oc.Compression = &defaultValue
 		logger.Debug("Compression not provided, using default", "default", "none")
 	} else {
-		// Valider les valeurs acceptées
 		validCompressions := []string{"none", "gzip", "snappy", "lz4", "zstd"}
 		valid := false
 		for _, v := range validCompressions {
@@ -408,8 +408,8 @@ func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *
 type DropValidator struct{}
 
 // DropValidator has two specifics fields :
-// filterCriteria : string (e.g., "field_name=<filterCriteria")
-// fieldName : string (e.g., "<field_name>=filterCriteria")
+// filterCriteria : string (e.g. "field_name=<filterCriteria")
+// fieldName : string (e.g. "<field_name>=filterCriteria")
 func (v *DropValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
 	hasFieldName := cfg["field_name"] != nil
 	hasFilterCriteria := cfg["filter_criteria"] != nil
