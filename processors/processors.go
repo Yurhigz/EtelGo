@@ -63,10 +63,9 @@ func NewProcessor(cfg ProcessorConfig, logger *slog.Logger) (Processor, error) {
 type TimestampReplayProcessor struct {
 
 	// Option 1 : specific timestamps to replay at
-	TargetTimestamps *string // Must respect the ISO 8601 format
+	ParsedTimestamps *time.Time
 	// Option 2 : an offset to replay messages
-	Offset *int64
-	Unit   *string // e.g "seconds", "minutes", "hours"
+	Offset *time.Duration
 	logger *slog.Logger
 }
 
@@ -74,30 +73,12 @@ func NewTimestampReplayProcessor(cfg ProcessorConfig) (Processor, error) {
 	processor := &TimestampReplayProcessor{
 		logger: cfg.logger,
 	}
-	val, ok := cfg.Config["target_timestamps"]
-	if ok {
-		strVal, ok := val.(string)
-		if ok {
-			processor.TargetTimestamps = &strVal
-		}
+	if parsedTs, ok := cfg.Config["parsed_timestamp"].(time.Time); ok {
+		processor.ParsedTimestamps = &parsedTs
+	} else {
+		offset := cfg.Config["parsed_offset"].(time.Duration)
+		processor.Offset = &offset
 	}
-
-	offVal, ok := cfg.Config["offset"]
-	if ok {
-		intVal, ok := offVal.(int64)
-		if ok {
-			processor.Offset = &intVal
-		}
-	}
-
-	unitVal, ok := cfg.Config["unit"]
-	if ok {
-		strVal, ok := unitVal.(string)
-		if ok {
-			processor.Unit = &strVal
-		}
-	}
-
 	return processor, nil
 }
 
@@ -107,36 +88,15 @@ func (p *TimestampReplayProcessor) Name() string {
 
 // Process can replay messages based on the options defined in the processor.
 // This processer basically applies to every message where there is a timestamp field correspond to the field name used in the configuration.
-
 func (p *TimestampReplayProcessor) Process(msg *consumer.Message) (*consumer.Message, error) {
 	p.logger.Info("TimestampReplayProcessor: processing message for timestamp replay")
 	// Dual logic based on the options provided
 
-	if p.TargetTimestamps != nil {
-		newTimestamp, err := time.Parse(time.RFC3339, *p.TargetTimestamps)
-		if err != nil {
-			p.logger.Error("failed to parse target timestamp", "error", err)
-			return nil, err
-		}
-		msg.Timestamp = newTimestamp
+	if p.ParsedTimestamps != nil {
+		msg.Timestamp = *p.ParsedTimestamps
 	} else {
-		if p.Offset != nil && p.Unit != nil {
-			var duration time.Duration
-			switch *p.Unit {
-			case "seconds":
-				duration = time.Duration(*p.Offset) * time.Second
-			case "minutes":
-				duration = time.Duration(*p.Offset) * time.Minute
-			case "hours":
-				duration = time.Duration(*p.Offset) * time.Hour
-			default:
-				err := errors.New("invalid time unit for offset")
-				p.logger.Error("invalid time unit", "unit", *p.Unit)
-				return nil, err
-			}
-			msg.Timestamp = msg.Timestamp.Add(duration)
-		}
-
+		newTs := msg.Timestamp.Add(*p.Offset)
+		msg.Timestamp = newTs
 	}
 	return msg, nil
 }
