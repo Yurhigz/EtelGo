@@ -344,15 +344,11 @@ var processorValidators = map[string]ProcessorValidator{
 type TimestampReplayValidator struct{}
 
 var availableUnits = map[string]bool{
-	"microseconds": true,
 	"milliseconds": true,
 	"seconds":      true,
 	"minutes":      true,
 	"hours":        true,
 	"days":         true,
-	"weeks":        true,
-	"months":       true,
-	"years":        true,
 }
 
 func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *slog.Logger) error {
@@ -376,28 +372,51 @@ func (v *TimestampReplayValidator) Validate(cfg map[string]interface{}, logger *
 	}
 
 	if hasTargetTimestamp {
-		parsedtimestamp, err := time.Parse(time.RFC3339, cfg["target_timestamp"].(string))
+		parsedTs, err := time.Parse(time.RFC3339, cfg["target_timestamp"].(string))
 		if err != nil {
 			logger.Error("timestamp_replay validation failed: invalid target_timestamp format", "error", err)
 			return fmt.Errorf("timestamp_replay: invalid target_timestamp format: %w", err)
 		}
 
-		cfg["parsed_timestamp"] = parsedtimestamp
+		cfg["parsed_timestamp"] = parsedTs
 	}
 
 	if hasOffset {
-		offset, ok := cfg["offset"]
-		switch offset.(type) {
-		case int, int64:
-		default:
-			logger.Error("timestamp_replay validation failed: 'offset' must be an integer")
-			return fmt.Errorf("offset must be an integer")
-		}
 		unitStr, ok := cfg["unit"].(string)
 		if !ok || !availableUnits[unitStr] {
 			logger.Error("timestamp_replay validation failed: invalid 'unit' value", "value", cfg["unit"])
 			return fmt.Errorf("timestamp_replay: invalid 'unit' value: %v", cfg["unit"])
 		}
+		offset, ok := cfg["offset"]
+		switch offset.(type) {
+		case int, int64:
+			var offsetVal int64
+			switch o := offset.(type) {
+			case int:
+				offsetVal = int64(o)
+			case int64:
+				offsetVal = o
+			}
+
+			var duration time.Duration
+			switch unitStr {
+			case "seconds":
+				duration = time.Duration(offsetVal) * time.Second
+			case "minutes":
+				duration = time.Duration(offsetVal) * time.Minute
+			case "hours":
+				duration = time.Duration(offsetVal) * time.Hour
+			case "milliseconds":
+				duration = time.Duration(offsetVal) * time.Millisecond
+			case "days":
+				duration = time.Duration(offsetVal) * 24 * time.Hour
+			}
+			cfg["parsed_offset"] = duration
+		default:
+			logger.Error("timestamp_replay validation failed: 'offset' must be an integer")
+			return fmt.Errorf("offset must be an integer")
+		}
+
 	}
 
 	return nil
