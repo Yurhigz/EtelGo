@@ -1,9 +1,12 @@
-package main
+package pipelines
 
 import (
 	"context"
 	"etelgo/config"
 	"etelgo/consumer"
+	"etelgo/outputs"
+	"etelgo/processors"
+	"fmt"
 	"log/slog"
 	"sync"
 )
@@ -11,29 +14,62 @@ import (
 // Need to add how to handle different type of consumer
 // Agnostic consumer to prevent rewriting code as soon as library or inputs are added
 type Orchestrator struct {
-	config   *config.Config
-	consumer *consumer.KafkaConsumer
-	logger   *slog.Logger
+	config     *config.Config
+	consumer   consumer.Consumer
+	logger     *slog.Logger
+	processors []processors.Processor
+	output     outputs.Output
 	//metrics to be added to enable telemetry and observability
 }
 
-func NewOrchestrator(configPath string, logger *slog.Logger) (*Orchestrator, error) {
+func NewOrchestrator(configPath string, logger *slog.Logger, dryRun bool) (*Orchestrator, error) {
 	cfg, err := config.LoadConfig(configPath, logger)
 	if err != nil {
 		logger.Error("error loading config")
 		return nil, err
 	}
 
-	cons, err := consumer.NewKafkaConsumer(&cfg.Input, logger)
-	if err != nil {
-		logger.Error("error creating a new Kafka Consumer")
-		return nil, err
+	var cons consumer.Consumer
+	if !dryRun {
+		kc, err := consumer.NewKafkaConsumer(&cfg.Input, logger)
+		if err != nil {
+			logger.Error("error creating a new Kafka Consumer")
+			return nil, err
+		}
+		cons = kc
+	}
+
+	// instantiate processors
+	var procList []processors.Processor
+	for i, pconf := range cfg.Processors {
+		conv := processors.ProcessorConfig{
+			Type:   pconf.Type,
+			Config: pconf.Config,
+		}
+		p, err := processors.NewProcessor(conv, logger)
+		if err != nil {
+			return nil, fmt.Errorf("processor %d initialization failed: %w", i, err)
+		}
+		procList = append(procList, p)
+	}
+
+	var out outputs.Output
+	if dryRun {
+		out = outputs.NewConsoleOutput(logger)
+	} else {
+		ko, err := outputs.NewKafkaOutput(&cfg.Output, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Kafka output: %w", err)
+		}
+		out = ko
 	}
 
 	return &Orchestrator{
-		cfg,
-		cons,
-		logger,
+		config:     cfg,
+		consumer:   cons,
+		logger:     logger,
+		processors: procList,
+		output:     out,
 	}, nil
 }
 
@@ -41,12 +77,19 @@ func (o *Orchestrator) Run(ctx context.Context, dryRun bool) error {
 	o.logger.Info("Running Orchestrator")
 
 	if dryRun {
-		o.logger.Info("Dry run mode - exiting")
+		o.logger.Info("Dry run mode - no consumer will be started")
 		return nil
 	}
 
-	//start consumer
-	o.consumer.Start(ctx)
+	// start consumer
+	if o.consumer == nil {
+		o.logger.Error("no consumer available to start")
+		return nil
+	}
+	if err := o.consumer.Start(ctx); err != nil {
+		o.logger.Error("failed to start consumer", "error", err)
+		return err
+	}
 	defer o.consumer.Close()
 
 	//Messages loop
@@ -108,5 +151,25 @@ func (o *Orchestrator) handleErrorByType(err error) {
 func (o *Orchestrator) ProcessMessages(msg *consumer.Message, ctx context.Context) error {
 	o.logger.Info("Starting message processing")
 
+	var err error
+	current := msg
+	for _, p := range o.processors {
+		if p == nil {
+			continue
+		}
+		current, err = p.Process(current)
+		if err != nil {
+			return err
+		}
+		if current == nil {
+			// dropped by a processor
+			o.logger.Info("message dropped by processor")
+			return nil
+		}
+	}
+
+	if o.output != nil {
+		return o.output.Write(ctx, current)
+	}
 	return nil
 }
