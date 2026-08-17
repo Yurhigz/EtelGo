@@ -1,16 +1,25 @@
 package main
 
 import (
+	"context"
 	"etelgo/config"
+	"etelgo/pipelines"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 const Version = "1.0.0"
 
 func main() {
+
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(1)
+	}
 
 	command := os.Args[1]
 
@@ -62,19 +71,32 @@ func runCommand() {
 
 	logger := newLogger(*logLevel)
 
-	config, err := config.LoadConfig(*configFile, logger)
+	cfg, err := config.LoadConfig(*configFile, logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
 
 	logger.Info("Starting pipeline",
-		"topic_in", config.Input.Topic,
-		"topic_out", config.Output.Topic,
+		"topic_in", cfg.Input.Topic,
+		"topic_out", cfg.Output.Topic,
 		"dry_run", *dryRun,
 	)
 
-	// Suite de la logique à implémenter et à appeler dans le run
+	// create context that listens for SIGINT/SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	orch, err := pipelines.NewOrchestrator(*configFile, logger, *dryRun)
+	if err != nil {
+		logger.Error("failed to create orchestrator", "error", err)
+		os.Exit(1)
+	}
+
+	if err := orch.Run(ctx, *dryRun); err != nil {
+		logger.Error("orchestrator run failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 // validateCommand checks the configuration file to insure it's valid
