@@ -4,6 +4,7 @@ import (
 	"context"
 	"etelgo/config"
 	"log/slog"
+	"strings"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -36,6 +37,7 @@ type KafkaConsumer struct {
 	logger   *slog.Logger
 	messages chan *Message
 	errors   chan error
+	format   string
 	// Potentially other fields for configuration, state, etc.
 }
 
@@ -59,13 +61,15 @@ func NewKafkaConsumer(cfg *config.InputConfig, logger *slog.Logger) (*KafkaConsu
 		logger:   logger,
 		messages: make(chan *Message),
 		errors:   make(chan error),
+		format:   strings.ToLower(cfg.Format),
 	}, nil
 }
 
-func (kc *KafkaConsumer) Start(ctx context.Context) {
+func (kc *KafkaConsumer) Start(ctx context.Context) error {
 	kc.logger.Info("Starting Kafka consumer")
 
 	go kc.pollMessages(ctx)
+	return nil
 }
 
 // Poll messages from Kafka and send them to the messages channel, multiple select patterns to handle context cancellation
@@ -93,7 +97,7 @@ func (kc *KafkaConsumer) pollMessages(ctx context.Context) {
 			fetches.EachRecord(func(record *kgo.Record) {
 				msg := FromKafkaFranz(record)
 
-				deserializer := NewDeserializer("json") // For now, hardcoded to JSON
+				deserializer := NewDeserializer(kc.format)
 				valueFields, err := deserializer.Deserialize(msg.Value)
 				if err != nil {
 					kc.logger.Error("failed to deserialize message value", "error", err)
@@ -125,6 +129,12 @@ func (kc *KafkaConsumer) Errors() <-chan error {
 }
 
 func (kc *KafkaConsumer) Close() error {
-	// Wrapper autour de kc.client.Close()
-	panic("unimplemented")
+	kc.logger.Info("Closing Kafka consumer")
+	if kc.client != nil {
+		kc.client.Close()
+	}
+	// close channels to signal consumers
+	close(kc.messages)
+	close(kc.errors)
+	return nil
 }
