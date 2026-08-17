@@ -73,11 +73,22 @@ func NewTimestampReplayProcessor(cfg ProcessorConfig) (Processor, error) {
 	processor := &TimestampReplayProcessor{
 		logger: cfg.logger,
 	}
-	if parsedTs, ok := cfg.Config["parsed_timestamp"].(time.Time); ok {
-		processor.ParsedTimestamps = &parsedTs
-	} else {
-		offset := cfg.Config["parsed_offset"].(time.Duration)
-		processor.Offset = &offset
+	if parsedTsRaw, ok := cfg.Config["parsed_timestamp"]; ok {
+		if parsedTs, ok2 := parsedTsRaw.(time.Time); ok2 {
+			processor.ParsedTimestamps = &parsedTs
+		}
+	}
+	if offsetRaw, ok := cfg.Config["parsed_offset"]; ok {
+		switch v := offsetRaw.(type) {
+		case time.Duration:
+			processor.Offset = &v
+		case int64:
+			d := time.Duration(v)
+			processor.Offset = &d
+		case int:
+			d := time.Duration(v)
+			processor.Offset = &d
+		}
 	}
 	return processor, nil
 }
@@ -212,7 +223,23 @@ func NewTransformProcessor(cfg ProcessorConfig) (Processor, error) {
 		}
 	}
 
-	processor.params = cfg.Config["params"].(map[string]interface{})
+	// params can be provided as a map under "params" or as top-level prefix/suffix keys
+	var params map[string]interface{}
+	if pRaw, ok := cfg.Config["params"]; ok {
+		if pm, ok := pRaw.(map[string]interface{}); ok {
+			params = pm
+		}
+	}
+	if params == nil {
+		params = make(map[string]interface{})
+		if prefix, ok := cfg.Config["prefix"]; ok {
+			params["prefix"] = prefix
+		}
+		if suffix, ok := cfg.Config["suffix"]; ok {
+			params["suffix"] = suffix
+		}
+	}
+	processor.params = params
 
 	return processor, nil
 }
